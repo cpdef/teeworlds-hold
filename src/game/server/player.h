@@ -5,6 +5,7 @@
 
 // this include should perhaps be removed
 #include "entities/character.h"
+#include "entities/flag.h"
 #include "gamecontext.h"
 
 // player object
@@ -31,9 +32,12 @@ public:
 	void OnDirectInput(CNetObj_PlayerInput *NewInput);
 	void OnPredictedInput(CNetObj_PlayerInput *NewInput);
 	void OnDisconnect(const char *pReason);
+	void OnEmoticon(int emoticon);
 
 	void KillCharacter(int Weapon = WEAPON_GAME);
 	CCharacter *GetCharacter();
+	int GetEmoticon() { return m_LastEmoticon; }
+	bool HasFlag(); 
 
 	//---------------------------------------------------------
 	// this is used for snapping so we know how we can clip the view for the player
@@ -62,6 +66,8 @@ public:
 	int m_LastChangeInfo;
 	int m_LastEmote;
 	int m_LastKill;
+	int m_LastEmoticon;
+        int m_EmoticonTick;
 
 	// TODO: clean this up
 	struct

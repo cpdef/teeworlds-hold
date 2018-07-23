@@ -5,12 +5,12 @@
 #include <game/server/gamecontroller.h>
 #include <game/server/entity.h>
 
-class CGameControllerCTF : public IGameController
+class CGameControllerHOLD : public IGameController
 {
 public:
-	class CFlag *m_apFlags[2];
+//	class CFlag *m_pFlag;
 
-	CGameControllerCTF(class CGameContext *pGameServer);
+	CGameControllerHOLD(class CGameContext *pGameServer);
 	virtual void DoWincheck();
 	virtual bool CanBeMovedOnBalance(int ClientID);
 	virtual void Snap(int SnappingClient);

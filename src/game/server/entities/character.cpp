@@ -8,6 +8,7 @@
 #include "character.h"
 #include "laser.h"
 #include "projectile.h"
+#include <iostream>
 
 //input count
 struct CInputCount
@@ -280,6 +281,9 @@ void CCharacter::FireWeapon()
 	}
 
 	vec2 ProjStartPos = m_Pos+Direction*m_ProximityRadius*0.75f;
+
+	if (g_Config.m_SvFlagholderdamage == 0 && GetPlayer()->HasFlag() && m_ActiveWeapon != WEAPON_HAMMER && m_ActiveWeapon != WEAPON_GRENADE)
+		return;
 
 	switch(m_ActiveWeapon)
 	{
@@ -697,6 +701,21 @@ bool CCharacter::TakeDamage(vec2 Force, int Dmg, int From, int Weapon)
 
 	if(GameServer()->m_pController->IsFriendlyFire(m_pPlayer->GetCID(), From) && !g_Config.m_SvTeamdamage)
 		return false;
+
+	// disable Flagholder make damage (if set)
+	if(!g_Config.m_SvTeamdamage && Weapon == WEAPON_GRENADE && From != GetPlayer()->GetCID()) 
+	{
+		for (int i=0;i<MAX_CLIENTS;i++) {
+			if (GameServer()->m_apPlayers[i] && From == GameServer()->m_apPlayers[i]->GetCID())
+			{
+				std::cout << "GRENADE DAMAGE: from:" << From
+					<< " to " << GetPlayer()->GetCID() << " has flag?: " 
+					<< GameServer()->m_apPlayers[i]->HasFlag() << std::endl;
+				if (GameServer()->m_apPlayers[i]->HasFlag())
+					return false;
+			}
+		}
+	}
 
 	// m_pPlayer only inflicts half damage on self
 	if(From == m_pPlayer->GetCID())

@@ -3,7 +3,7 @@
 #include <new>
 #include <engine/shared/config.h>
 #include "player.h"
-
+#include <iostream>
 
 MACRO_ALLOC_POOL_ID_IMPL(CPlayer, MAX_CLIENTS)
 
@@ -21,6 +21,8 @@ CPlayer::CPlayer(CGameContext *pGameServer, int ClientID, int Team)
 	m_SpectatorID = SPEC_FREEVIEW;
 	m_LastActionTick = Server()->Tick();
 	m_TeamChangeTick = Server()->Tick();
+	m_LastEmoticon = -1;
+	m_EmoticonTick = Server()->Tick();
 }
 
 CPlayer::~CPlayer()
@@ -155,138 +157,154 @@ void CPlayer::Snap(int SnappingClient)
 	}
 }
 
+void CPlayer::OnEmoticon(int emoticon) 
+{
+	m_LastEmoticon = emoticon;
+	m_EmoticonTick = Server()->Tick();
+}
+
+bool CPlayer::HasFlag() 
+{
+	//if (!m_pGameServer->m_pController->m_pFlag || !m_pGameServer->m_pController->m_pFlag->m_pCarryingCharacter) 
+	if (!m_pGameServer->m_pController->m_pFlag->m_pCarryingCharacter) 
+		return false; 
+	return m_pGameServer->m_pController->m_pFlag->m_pCarryingCharacter->GetPlayer()->GetCID() == GetCID(); 
+}
+
 void CPlayer::OnDisconnect(const char *pReason)
-{
-	KillCharacter();
-
-	if(Server()->ClientIngame(m_ClientID))
 	{
-		char aBuf[512];
-		if(pReason && *pReason)
-			str_format(aBuf, sizeof(aBuf), "'%s' has left the game (%s)", Server()->ClientName(m_ClientID), pReason);
-		else
-			str_format(aBuf, sizeof(aBuf), "'%s' has left the game", Server()->ClientName(m_ClientID));
-		GameServer()->SendChat(-1, CGameContext::CHAT_ALL, aBuf);
+		KillCharacter();
 
-		str_format(aBuf, sizeof(aBuf), "leave player='%d:%s'", m_ClientID, Server()->ClientName(m_ClientID));
-		GameServer()->Console()->Print(IConsole::OUTPUT_LEVEL_STANDARD, "game", aBuf);
-	}
-}
-
-void CPlayer::OnPredictedInput(CNetObj_PlayerInput *NewInput)
-{
-	// skip the input if chat is active
-	if((m_PlayerFlags&PLAYERFLAG_CHATTING) && (NewInput->m_PlayerFlags&PLAYERFLAG_CHATTING))
-		return;
-
-	if(m_pCharacter)
-		m_pCharacter->OnPredictedInput(NewInput);
-}
-
-void CPlayer::OnDirectInput(CNetObj_PlayerInput *NewInput)
-{
-	if(NewInput->m_PlayerFlags&PLAYERFLAG_CHATTING)
-	{
-		// skip the input if chat is active
-		if(m_PlayerFlags&PLAYERFLAG_CHATTING)
-			return;
-
-		// reset input
-		if(m_pCharacter)
-			m_pCharacter->ResetInput();
-
-		m_PlayerFlags = NewInput->m_PlayerFlags;
- 		return;
-	}
-
-	m_PlayerFlags = NewInput->m_PlayerFlags;
-
-	if(m_pCharacter)
-		m_pCharacter->OnDirectInput(NewInput);
-
-	if(!m_pCharacter && m_Team != TEAM_SPECTATORS && (NewInput->m_Fire&1))
-		m_Spawning = true;
-
-	// check for activity
-	if(NewInput->m_Direction || m_LatestActivity.m_TargetX != NewInput->m_TargetX ||
-		m_LatestActivity.m_TargetY != NewInput->m_TargetY || NewInput->m_Jump ||
-		NewInput->m_Fire&1 || NewInput->m_Hook)
-	{
-		m_LatestActivity.m_TargetX = NewInput->m_TargetX;
-		m_LatestActivity.m_TargetY = NewInput->m_TargetY;
-		m_LastActionTick = Server()->Tick();
-	}
-}
-
-CCharacter *CPlayer::GetCharacter()
-{
-	if(m_pCharacter && m_pCharacter->IsAlive())
-		return m_pCharacter;
-	return 0;
-}
-
-void CPlayer::KillCharacter(int Weapon)
-{
-	if(m_pCharacter)
-	{
-		m_pCharacter->Die(m_ClientID, Weapon);
-		delete m_pCharacter;
-		m_pCharacter = 0;
-	}
-}
-
-void CPlayer::Respawn()
-{
-	if(m_Team != TEAM_SPECTATORS)
-		m_Spawning = true;
-}
-
-void CPlayer::SetTeam(int Team, bool DoChatMsg)
-{
-	// clamp the team
-	Team = GameServer()->m_pController->ClampTeam(Team);
-	if(m_Team == Team)
-		return;
-
-	char aBuf[512];
-	if(DoChatMsg)
-	{
-		str_format(aBuf, sizeof(aBuf), "'%s' joined the %s", Server()->ClientName(m_ClientID), GameServer()->m_pController->GetTeamName(Team));
-		GameServer()->SendChat(-1, CGameContext::CHAT_ALL, aBuf);
-	}
-
-	KillCharacter();
-
-	m_Team = Team;
-	m_LastActionTick = Server()->Tick();
-	m_SpectatorID = SPEC_FREEVIEW;
-	// we got to wait 0.5 secs before respawning
-	m_RespawnTick = Server()->Tick()+Server()->TickSpeed()/2;
-	str_format(aBuf, sizeof(aBuf), "team_join player='%d:%s' m_Team=%d", m_ClientID, Server()->ClientName(m_ClientID), m_Team);
-	GameServer()->Console()->Print(IConsole::OUTPUT_LEVEL_DEBUG, "game", aBuf);
-
-	GameServer()->m_pController->OnPlayerInfoChange(GameServer()->m_apPlayers[m_ClientID]);
-
-	if(Team == TEAM_SPECTATORS)
-	{
-		// update spectator modes
-		for(int i = 0; i < MAX_CLIENTS; ++i)
+		if(Server()->ClientIngame(m_ClientID))
 		{
-			if(GameServer()->m_apPlayers[i] && GameServer()->m_apPlayers[i]->m_SpectatorID == m_ClientID)
-				GameServer()->m_apPlayers[i]->m_SpectatorID = SPEC_FREEVIEW;
+			char aBuf[512];
+			if(pReason && *pReason)
+				str_format(aBuf, sizeof(aBuf), "'%s' has left the game (%s)", Server()->ClientName(m_ClientID), pReason);
+			else
+				str_format(aBuf, sizeof(aBuf), "'%s' has left the game", Server()->ClientName(m_ClientID));
+			GameServer()->SendChat(-1, CGameContext::CHAT_ALL, aBuf);
+
+			str_format(aBuf, sizeof(aBuf), "leave player='%d:%s'", m_ClientID, Server()->ClientName(m_ClientID));
+			GameServer()->Console()->Print(IConsole::OUTPUT_LEVEL_STANDARD, "game", aBuf);
 		}
 	}
-}
 
-void CPlayer::TryRespawn()
-{
-	vec2 SpawnPos;
+	void CPlayer::OnPredictedInput(CNetObj_PlayerInput *NewInput)
+	{
+		// skip the input if chat is active
+		if((m_PlayerFlags&PLAYERFLAG_CHATTING) && (NewInput->m_PlayerFlags&PLAYERFLAG_CHATTING))
+			return;
 
-	if(!GameServer()->m_pController->CanSpawn(m_Team, &SpawnPos))
-		return;
+		if(m_pCharacter)
+			m_pCharacter->OnPredictedInput(NewInput);
+	}
 
-	m_Spawning = false;
-	m_pCharacter = new(m_ClientID) CCharacter(&GameServer()->m_World);
-	m_pCharacter->Spawn(this, SpawnPos);
-	GameServer()->CreatePlayerSpawn(SpawnPos);
-}
+	void CPlayer::OnDirectInput(CNetObj_PlayerInput *NewInput)
+	{
+		if(NewInput->m_PlayerFlags&PLAYERFLAG_CHATTING)
+		{
+			// skip the input if chat is active
+			if(m_PlayerFlags&PLAYERFLAG_CHATTING)
+				return;
+
+			// reset input
+			if(m_pCharacter)
+				m_pCharacter->ResetInput();
+
+			m_PlayerFlags = NewInput->m_PlayerFlags;
+			return;
+		}
+
+		m_PlayerFlags = NewInput->m_PlayerFlags;
+
+		if(m_pCharacter)
+			m_pCharacter->OnDirectInput(NewInput);
+
+		if(!m_pCharacter && m_Team != TEAM_SPECTATORS && (NewInput->m_Fire&1))
+			m_Spawning = true;
+
+		// check for activity
+		if(NewInput->m_Direction || m_LatestActivity.m_TargetX != NewInput->m_TargetX ||
+			m_LatestActivity.m_TargetY != NewInput->m_TargetY || NewInput->m_Jump ||
+			NewInput->m_Fire&1 || NewInput->m_Hook)
+		{
+			m_LatestActivity.m_TargetX = NewInput->m_TargetX;
+			m_LatestActivity.m_TargetY = NewInput->m_TargetY;
+			m_LastActionTick = Server()->Tick();
+		}
+	}
+
+	CCharacter *CPlayer::GetCharacter()
+	{
+		if(m_pCharacter && m_pCharacter->IsAlive())
+			return m_pCharacter;
+		return 0;
+	}
+
+	void CPlayer::KillCharacter(int Weapon)
+	{
+		if(m_pCharacter)
+		{
+			m_pCharacter->Die(m_ClientID, Weapon);
+			delete m_pCharacter;
+			m_pCharacter = 0;
+		}
+	}
+
+	void CPlayer::Respawn()
+	{
+		if(m_Team != TEAM_SPECTATORS)
+			m_Spawning = true;
+	}
+
+	void CPlayer::SetTeam(int Team, bool DoChatMsg)
+	{
+		// clamp the team
+		Team = GameServer()->m_pController->ClampTeam(Team);
+		if(m_Team == Team)
+			return;
+
+		char aBuf[512];
+		if(DoChatMsg)
+		{
+			str_format(aBuf, sizeof(aBuf), "'%s' joined the %s", Server()->ClientName(m_ClientID), GameServer()->m_pController->GetTeamName(Team));
+			GameServer()->SendChat(-1, CGameContext::CHAT_ALL, aBuf);
+		}
+
+		KillCharacter();
+
+		m_Team = Team;
+		m_LastActionTick = Server()->Tick();
+		m_SpectatorID = SPEC_FREEVIEW;
+		// we got to wait 0.5 secs before respawning
+		m_RespawnTick = Server()->Tick()+Server()->TickSpeed()/2;
+		str_format(aBuf, sizeof(aBuf), "team_join player='%d:%s' m_Team=%d", m_ClientID, Server()->ClientName(m_ClientID), m_Team);
+		GameServer()->Console()->Print(IConsole::OUTPUT_LEVEL_DEBUG, "game", aBuf);
+
+		GameServer()->m_pController->OnPlayerInfoChange(GameServer()->m_apPlayers[m_ClientID]);
+
+		if(Team == TEAM_SPECTATORS)
+		{
+			// update spectator modes
+			for(int i = 0; i < MAX_CLIENTS; ++i)
+			{
+				if(GameServer()->m_apPlayers[i] && GameServer()->m_apPlayers[i]->m_SpectatorID == m_ClientID)
+					GameServer()->m_apPlayers[i]->m_SpectatorID = SPEC_FREEVIEW;
+			}
+		}
+	}
+
+	void CPlayer::TryRespawn()
+	{
+		vec2 SpawnPos;
+
+		if(!GameServer()->m_pController->CanSpawn(m_Team, &SpawnPos))
+			return;
+
+		m_Spawning = false;
+		m_pCharacter = new(m_ClientID) CCharacter(&GameServer()->m_World);
+		m_pCharacter->Spawn(this, SpawnPos);
+		GameServer()->CreatePlayerSpawn(SpawnPos);
+	}
+
+

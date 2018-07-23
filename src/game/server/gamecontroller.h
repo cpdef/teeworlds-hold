@@ -4,7 +4,7 @@
 #define GAME_SERVER_GAMECONTROLLER_H
 
 #include <base/vmath.h>
-
+#include <game/server/entity.h>
 /*
 	Class: Game Controller
 		Controls the main game logic. Keeping track of team and player score,
@@ -63,6 +63,7 @@ protected:
 
 public:
 	const char *m_pGameType;
+	class CFlag *m_pFlag;
 
 	bool IsTeamplay() const;
 	bool IsGameOver() const { return m_GameOverTick != -1; }
